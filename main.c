@@ -149,7 +149,7 @@ while(mask){
 		CLR(CLK);
 	}
 	
-	SET(CS);//konèí vysílaní, chip select dám do 1
+	SET(CS);//konèí vysílání chip select dám do 1
 }
 
 
