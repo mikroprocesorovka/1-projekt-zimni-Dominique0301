@@ -49,9 +49,9 @@
 #define DIGIT7 		8	
 #define DECODE_MODE 9	// Aktivace/Deaktivace znakové sady (my volíme v?dy hodnotu DECODE_ALL)
 #define INTENSITY 	10	// Nastavení jasu - argument je císlo 0 až 15 (vetší císlo vetší jas)
-#define SCAN_LIMIT 	11	// Volba poctu cifer (velikosti displeje) - argument je c?slo 0 a? 7 (my d?v?me v?dy 7)
+#define SCAN_LIMIT 	11	// Volba poctu cifer (velikosti displeje) 
 #define SHUTDOWN 	12	// Aktivace/Deaktivace displeje (ON / OFF)
-#define DISPLAY_TEST 	15	// Aktivace/Deaktivace "testu" (rozsv?t? v?echny segmenty)
+#define DISPLAY_TEST 	15	// Aktivace/Deaktivace "testu" (rozsvítí všechny segmenty)
 
 // makra argumentu
 // argumenty pro SHUTDOWN
