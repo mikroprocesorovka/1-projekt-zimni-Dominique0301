@@ -92,7 +92,7 @@ char getchar (void) //funkce cte(prijma data) vstup z UART
 
 
 //Povoleni UART1 (Vyuzivane na komunikaci s PC)
-void init_uart1(void)
+void init_uart(void)
 {
     UART1_DeInit();         // smazat starou konfiguraci
 		UART1_Init((uint32_t)115200, //Nova konfigurace
@@ -172,7 +172,7 @@ void init(void){
 
 	
 	
-	init_uart1(); //Povoleni komunikace s PC
+	init_uart(); //Povoleni komunikace s PC
 	
 	
 	
