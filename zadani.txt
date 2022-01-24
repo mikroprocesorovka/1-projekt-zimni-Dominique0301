@@ -1,0 +1,8 @@
+ měřič vzdálenosti
+
+*Ultrazvukový měřič vzdálenosti bude měřit vzdálenost
+*výsledek v cm se bude zobrazovat v putty 
+*a bude se zobrazovat i na max7219 dsipleji
+*když naměří pod určitou vzdálenost, spustí se bzučák
+
+děláno v STVD
