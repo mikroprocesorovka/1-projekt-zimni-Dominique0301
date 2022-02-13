@@ -11,7 +11,7 @@
 
 
 //Ultrasonic
-#define TI1_PORT GPIOD
+#define TI1_PORT GPIOD//nelze pøipojit kamkoliv!!!
 #define TI1_PIN  GPIO_PIN_4
 
 #define TRGG_PORT GPIOC
@@ -20,7 +20,7 @@
 #define TRGG_OFF  GPIO_WriteLow(TRGG_PORT, TRGG_PIN);
 #define TRGG_REVERSE GPIO_WriteReverse(TRGG_PORT, TRGG_PIN);
 
-#define MASURMENT_PERON 444    // maximalni celkovy cas mereni (ms)
+#define MEASURMENT_PERON 444    // perioda mìøení (ms). Doba po kterou èekám a pokud se nic nestane tak je mìøení nedomìøené
 
 
 //Max7219
@@ -79,7 +79,7 @@ char putchar (char c)
   return (c);
 }
 
-char getchar (void) //funkce cte(prijma data) vstup z UART
+char getchar (void) //ète vstup z UART
 {
 
   int c = 0;
@@ -160,6 +160,7 @@ void init(void){
   GPIO_Init(CLK_PORT, CLK_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);
 	GPIO_Init(CS_PORT, CS_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);
 	GPIO_Init(DIN_PORT, DIN_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);
+	GPIO_Init (BZ_PORT, BZ_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);//buzzer
 	max7219(DECODE_MODE, DECODE_ALL); // zapnout znakovou sadu na vsech cifrach
   max7219(SCAN_LIMIT, 7); // velikost displeje 8 cifer (pocítano od nuly, proto je argument cislo 7)
   max7219(INTENSITY, 3); 
@@ -168,41 +169,44 @@ void init(void){
 	
 	CLK_HSIPrescalerConfig(CLK_PRESCALER_HSIDIV1); // taktovat MCU na 16MHz
 	
-  init_milis(); 
-
-	
-	
+  
+	init_milis(); 
 	init_uart(); //Povoleni komunikace s PC
 	
 	
 	
 
 	//Inicializace ultrasonicu
-    /*----          trigger setup           ---------*/
-    GPIO_Init(TRGG_PORT, TRGG_PIN, GPIO_MODE_OUT_PP_LOW_SLOW);
+    //Trigger setup
+    GPIO_Init(TRGG_PORT, TRGG_PIN, GPIO_MODE_OUT_PP_LOW_SLOW); //režim push pull
+		
+		//TIM2 setup
+    GPIO_Init(TI1_PORT, TI1_PIN, GPIO_MODE_IN_FL_NO_IT);  // kanál 1 jako vstupní kanál
+		// potøebuji nastavit pøeddìlièku a strop èasovaèe
 
-    /*----           TIM2 setup           ---------*/
-    GPIO_Init(TI1_PORT, TI1_PIN, GPIO_MODE_IN_FL_NO_IT);  // kanál 1 jako vstup
-
-    TIM2_TimeBaseInit(TIM2_PRESCALER_16, 0xFFFF );
+    TIM2_TimeBaseInit(TIM2_PRESCALER_16, 0xFFFF );//16 bitový, nechci ho omezovat >strop nastavím na ffff, 0x>hex soustava ffff=65535
+		//Prescaler dìlí frekvenci z master. Mám 16MHz a dìlím 16 takže mám 1 MHz.Perioda 1 mikro sek.
+		//èítaè je 16 bitový, každou mikro sekundu pøijde impuls.Takže napoèíta max 65536 mikro sekund. 
+		
+		
     /*TIM2_ITConfig(TIM2_IT_UPDATE, ENABLE);*/
     TIM2_Cmd(ENABLE);
     TIM2_ICInit(TIM2_CHANNEL_1,        // nastavuji CH1 (CaptureRegistr1)
-            TIM2_ICPOLARITY_RISING,    // nabìžná hrana
-            TIM2_ICSELECTION_DIRECTTI, // CaptureRegistr1 bude ovládán z CH1
+            TIM2_ICPOLARITY_RISING,    // zachycení se spouští pomocí nabìžné hrany
+            TIM2_ICSELECTION_DIRECTTI, // CaptureRegistr1 bude ovládán pøímo (DIRECT)z CH1
             TIM2_ICPSC_DIV1,           // delicka je vypnuta
             0                          // vstupní filter je vypnuty
         );            
     TIM2_ICInit(TIM2_CHANNEL_2,        // nastavuji CH2 (CaptureRegistr2)
-            TIM2_ICPOLARITY_FALLING,   // sestupna hrana
-            TIM2_ICSELECTION_INDIRECTTI, // CaptureRegistr2 bude ovl?d?n z CH1
+            TIM2_ICPOLARITY_FALLING,   //zachytávat se  sestupnou hranou
+            TIM2_ICSELECTION_INDIRECTTI, // CaptureRegistr2 bude ovládán  (nepøímo) z CH1
             TIM2_ICPSC_DIV1,           // delicka je vypnuta
             0                          // vstupni filter je vypnuty
         );            
 }
 
 
-
+//Na maxu budou všude nuly
 void nuly(void)
 {
 	max7219(1,0);
@@ -219,8 +223,8 @@ void nuly(void)
 
 
 
-typedef enum //Enum pro stavy snimace vzdalenosti
-{
+typedef enum //datový typ Enum pro stavy snimace vzdalenosti
+{//definuju si stavy
     TRGG_START,       // zahájení trigger impulzu
     TRGG_WAIT,        // cekání na konec trrigger impulzu
     MEASURMENT_WAIT   // èekání na dokonèení meøení
@@ -230,29 +234,30 @@ typedef enum //Enum pro stavy snimace vzdalenosti
 void main(void)
 {
     uint32_t mtime_ultrasonic = 0;
-    uint32_t diff;
-    STATE_TypeDef state = TRGG_START;
+    uint32_t delka;
+    STATE_TypeDef state = TRGG_START;//øíká mi v jakém stavu se nachází. Nejdøiv udìlám trigger impuls a budu èekat než uplyne doba trrg impulsu.
 
 		
     init();
 		nuly();
-    printf("Start programu\r\n");
+   
 
 
 
 
-    while (1) {
+    while (1) {//nekoneèná smyèka  co bìha dokola
         switch (state) { //Stav snimace
         case TRGG_START:
-            if (milis() - mtime_ultrasonic > MASURMENT_PERON) {
-                mtime_ultrasonic = milis();
-                TRGG_ON;
-                state = TRGG_WAIT;
+            if (milis() - mtime_ultrasonic > MEASURMENT_PERON) {// kontroluji zda nepøetekla doba mìøení
+                mtime_ultrasonic = milis();// pokud ano zahájí nové mìøení
+                TRGG_ON;//zahájím mìøení
+                state = TRGG_WAIT;//jakmile zjistím, že jsem nastavil impuls, tak pøepínám do stavu trigger wait.
             }
             break;
+						
         case TRGG_WAIT:
-            if (milis() - mtime_ultrasonic > 1) {
-                TRGG_OFF;
+            if (milis() - mtime_ultrasonic > 1) {//pokud jsem ve stavu trigger wait a už uplynula 1ms
+                TRGG_OFF;//Tak to vypnu a udìlám sestupnou hranu.
                 // smažu všechny vlajky
                 TIM2_ClearFlag(TIM2_FLAG_CC1);
                 TIM2_ClearFlag(TIM2_FLAG_CC2); 
@@ -261,24 +266,31 @@ void main(void)
                 state = MEASURMENT_WAIT;
             }
             break;
+						
         case MEASURMENT_WAIT:
              /* detekuji sestupnou hranu ECHO signálu; vzestupnou hranu 
-              * detekovat nemusím, zachycen? CC1 i CC2 probehne automaticky  */
-            if (TIM2_GetFlagStatus(TIM2_FLAG_CC2) == RESET) {
-                TIM2_ClearFlag(TIM2_FLAG_CC1);  // sma?u vlajku CC1
-                TIM2_ClearFlag(TIM2_FLAG_CC2);  // sma?u vlajku CC2
+              * detekovat nemusím, zachyceni CC1 i CC2 probehne automaticky  */
+            if (TIM2_GetFlagStatus(TIM2_FLAG_CC2) == RESET) {//byla už nastavená vlajka ???
+                TIM2_ClearFlag(TIM2_FLAG_CC1);  // smažu vlajku CC1
+                TIM2_ClearFlag(TIM2_FLAG_CC2);  // smažu vlajku CC2
 
                 // délka impulzu  
-                diff = (TIM2_GetCapture2() - TIM2_GetCapture1()); 
+                delka = (TIM2_GetCapture2() - TIM2_GetCapture1()); 
 
 								//Vypocet a vypsani vzdalenosti na PC a displej
-                //diff = (diff * 340 + 10000)/ 20000; // FixPoint prepocet na cm -- korektne zaokrouhluje 
-                diff = (diff * 340)/ 20000; // FixPoint prepocet na cm -- zaokrouhluje v?dy dolu
-                printf("Vzdalenost: %lu cm\r\n", diff);
+                delka = (delka * 340)/ 20000; // FixPoint prepocet na cm 
+                printf("Vzdalenost: %lu cm\r\n", delka);
 						
-								max7219(1,diff-(diff/10*10));//jednotky
-								max7219(2,diff/10); //Desítky
-								max7219(3,diff/100); //Stovky
+								max7219(1,delka-(delka/10*10));//jednotky
+								max7219(2,delka/10); //Desítky
+								max7219(3,delka/100); //Stovky
+								
+								if (delka > 10){
+									GPIO_WriteHigh(BZ_PORT,BZ_PIN);
+								}
+			
+								
+							
 
 
                 state = TRGG_START;
@@ -289,6 +301,8 @@ void main(void)
         }
 				
     }
+		
+		
 }
 
 
@@ -300,7 +314,7 @@ void main(void)
 
 
 
-void assert_failed(uint8_t* file, uint32_t line)
+void assert_failed(uint8_t* file, uint32_t line)// stvd házelo nìjakou chybu s assert a tohle pomohlo
  
 
 {
